@@ -7,10 +7,29 @@ if( ! class_exists('Channel'))
 
 class Shine_pdf extends Channel {
 
+	private $_debug = array();
+
 	function __construct()
 	{
 		// Derive initial functions from Channel module
 		parent::Channel();
+
+		// Set the EE Cache Path? (hell you can override that)
+		$this->cache_path = $this->EE->config->item('cache_path') ? $this->EE->config->item('cache_path') : APPPATH.'cache/shine_pdf/';
+
+		//exist cache_path
+		if(!is_dir($this->cache_path))
+		{
+			if(!mkdir($this->cache_path))
+			{
+				$this->_debug[] = 'Cannot create cache dir';
+				return false;
+			}
+		}
+
+		//load helper
+		$this->EE->load->helper('file');
+		$this->EE->load->helper('download');
 	}
 	
 	/*
@@ -18,6 +37,10 @@ class Shine_pdf extends Channel {
 	 */
 	function make() {
 	
+		//cache param
+		$this->is_cache = in_array($this->EE->TMPL->fetch_param('cache', 'yes'), array('yes', 'y', 'on')) ? true : false;
+		$this->is_debug = in_array($this->EE->TMPL->fetch_param('debug', 'no'), array('yes', 'y', 'on')) ? true : false;
+
 		// Grab our variables and arguments from template tag
 		$this->params = array(
 			'mode'					=> '',															// Best left alone
@@ -40,11 +63,18 @@ class Shine_pdf extends Channel {
 		
 		// Parse any global variables that might be present in markup
 		$input = $this->EE->TMPL->parse_globals( $input );
+
+		//no result
+		if($this->sql == '')
+		{
+			return $this->EE->TMPL->no_results();
+		}
+
+		//re-query
+		$this->query = $this->EE->db->query($this->sql);
 		
 		// Clean tag data
 		$this->_clean_tagdata($input);
-		
-		
 		
 		// Set custom width and height if applicable
 		$this->_custom_width_height();
@@ -61,46 +91,100 @@ class Shine_pdf extends Channel {
 	 * Process final output using mPDF through our EE PDF library
 	 */
 	private function _process_pdf() {
-	
+		
 		// Get the EE PDF library
 		$this->EE->load->library('ee_pdf');
-		
-		// Push our previously-declared tag data to the library
-		$this->pdf = $this->EE->ee_pdf->load($this->params);
 
-		// Set automatic margins if needed
-		$this->_set_auto_margins();
-		
-		// Set PDF header if applicable
-		if(isset($this->header))
+		// is there something todo?
+		if($this->query->num_rows() > 0)
 		{
-			$this->pdf->SetHTMLHeader($this->header);
-		}
-		
-		// Set PDF footer if applicable
-		if(isset($this->footer))
-		{
-			$this->pdf->SetHTMLFooter($this->footer);
+			$filename = $this->cache_path.$this->query->row('entry_id').'_'.$this->query->row('entry_date').'.pdf';
+
+			//get the file if exist in the cache
+			$info = get_file_info($filename);
+
+			//is there any file
+			if($info != false && $this->is_cache)
+			{
+				$filename = $info['server_path'];
+				$this->_debug[] = 'Fetch PDF from cache';
+			}
+			else
+			{				
+				// Push our previously-declared tag data to the library
+				$this->pdf = $this->EE->ee_pdf->load($this->params);
+
+				// Set automatic margins if needed
+				$this->_set_auto_margins();
+				
+				// Set PDF header if applicable
+				if(isset($this->header))
+				{
+					$this->pdf->SetHTMLHeader($this->header);
+				}
+				
+				// Set PDF footer if applicable
+				if(isset($this->footer))
+				{
+					$this->pdf->SetHTMLFooter($this->footer);
+				}
+
+				//split in chunks 
+				if(strlen($this->body) > 100000)
+				{
+					$chunks = $this->_str_split_unicode($this->body, strlen($this->body) / 10); 
+					if(!empty($chunks)) 
+					{ 
+						foreach($chunks as $chunk) 
+						{ 
+							$this->pdf->WriteHTML($chunk, false, false); 
+						} 
+					} 
+				}
+				else
+				{
+					$this->pdf->WriteHTML($this->body);
+				}
+
+				//delete old cache files
+				foreach (glob($this->cache_path.$this->query->row('entry_id')."_*.pdf") as $_filename) {
+				    unlink($_filename);
+				    $this->_debug[] = 'Delete old cache file: '.$_filename;
+				}
+
+				//create new file
+				$this->pdf->Output($filename, 'F');
+				$this->_debug[] = 'Create new cache file: '.$filename;
+			}
+
 		}
 
-		//split in chunks 
-		$chunks = $this->_str_split_unicode($this->body, strlen($this->body) / 10); 
-		if(!empty($chunks)) 
-		{ 
-			foreach($chunks as $chunk) 
-			{ 
-				$this->pdf->WriteHTML($chunk); 
-			} 
-		} 
-		
-		// Write HTML to mPDF
-		$this->pdf->WriteHTML($this->body);
-		
-		// Output final PDF
-		$this->pdf->Output();
-		
+		//no entries
+		else
+		{
+			$this->_debug[] = 'Cannot create PDF file';
+			if($this->is_debug)
+			{
+				$this->_log($this->_debug);
+			}
+			exit;
+		}
+
+		//force to download
+		$this->_debug[] = 'Force to download the file: '.$this->query->row('title').'.pdf';
+
+		//force to download the file
+		if(!$this->is_debug)
+		{
+			force_download( $this->query->row('title').'.pdf', file_get_contents($filename));
+		}
+		else
+		{
+			$this->_log($this->_debug);
+		}
+			
 		exit;
-		
+
 	}
 
 	/* 
@@ -238,6 +322,23 @@ class Shine_pdf extends Channel {
 		
 		$this->body = preg_replace($patterns,'',$input);
 
+	}
+
+	/**
+	 * Log all messages
+	 *
+	 * @param array $logs The debug messages.
+	 * @return void
+	 */
+	private function _log( $logs = array())
+	{
+		if(!empty($logs))
+		{
+			foreach ($logs as $log)
+			{
+				echo '&nbsp;&nbsp;***&nbsp;&nbsp;Shine PDF debug: ' . $log."<br />";
+			}
+		}
 	}
 	
 }
