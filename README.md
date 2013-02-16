@@ -15,5 +15,5 @@ In this version there are modifications what will avoid problems like:
 
 Parameters extra
 =========
-cache="yes"
-debug="no"
+- cache="yes"
+- debug="no"
