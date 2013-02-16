@@ -110,7 +110,9 @@ class Shine_pdf extends Channel {
 				$this->_debug[] = 'Fetch PDF from cache';
 			}
 			else
-			{				
+			{	
+				 $this->EE->ee_pdf->debug = true;
+
 				// Push our previously-declared tag data to the library
 				$this->pdf = $this->EE->ee_pdf->load($this->params);
 
@@ -132,25 +134,38 @@ class Shine_pdf extends Channel {
 				//split in chunks 
 				if(strlen($this->body) > 100000)
 				{
-					$chunks = $this->_str_split_unicode($this->body, strlen($this->body) / 10); 
+					$chunks = $this->_split_chunk($this->body);
+					$total = count($chunks); 
+
 					if(!empty($chunks)) 
 					{ 
-						foreach($chunks as $chunk) 
+						foreach($chunks as $key=>$chunk) 
 						{ 
-							$this->pdf->WriteHTML($chunk, false, false); 
+							if($key == 0)
+							{
+								$this->pdf->WriteHTML($chunk, 0, true, false); 
+							}
+							else if(($key+1) == $total )
+							{
+								$this->pdf->WriteHTML($chunk, 0, false, true); 
+							}
+							else
+							{
+								$this->pdf->WriteHTML($chunk, 0, false, false); 
+							}	
 						} 
 					} 
 				}
 				else
 				{
-					$this->pdf->WriteHTML($this->body);
+					$this->pdf->WriteHTML($this->body, 0);
 				}
 
 				//delete old cache files
 				$old_files = glob($this->cache_path.$this->query->row('entry_id')."_*.pdf");
 				if(!empty($old_files))
 				{
-					foreach ( as $_filename) {
+					foreach ($old_files as $_filename) {
 					    @unlink($_filename);
 					    $this->_debug[] = 'Delete old cache file: '.$_filename;
 					}
@@ -195,22 +210,10 @@ class Shine_pdf extends Channel {
 	/* 
 	* proper unicode str_split 
 	*/
-	private function _str_split_unicode($str, $l = 0)
-	{ 
-		if ($l > 0)  
-		{ 
-			$ret = array(); 
-			$len = mb_strlen($str, "UTF-8"); 
-			for ($i = 0; $i < $len; $i += $l) 
-			{ 
-				$ret[] = mb_substr($str, $i, $l, "UTF-8"); 
-			} 
-		return $ret; 
-		}
-
-		return preg_split("//u", $str, -1, PREG_SPLIT_NO_EMPTY); 
-	} 
-	
+	private function _split_chunk($content) {
+	   return preg_split('/(<[^>]*[^\/]>)/i', $content, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
+	}
+		
 	/*
 	 * Define what manner of automatic margining to use if auto margins are desired
 	 */
