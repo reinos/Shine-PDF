@@ -82,6 +82,16 @@ class Shine_pdf extends Channel {
 		{
 			$this->pdf->SetHTMLFooter($this->footer);
 		}
+
+		//split in chunks 
+		$chunks = $this->_str_split_unicode($this->body, strlen($this->body) / 10); 
+		if(!empty($chunks)) 
+		{ 
+			foreach($chunks as $chunk) 
+			{ 
+				$this->pdf->WriteHTML($chunk); 
+			} 
+		} 
 		
 		// Write HTML to mPDF
 		$this->pdf->WriteHTML($this->body);
@@ -92,6 +102,25 @@ class Shine_pdf extends Channel {
 		exit;
 		
 	}
+
+	/* 
+	* proper unicode str_split 
+	*/
+	private function _str_split_unicode($str, $l = 0)
+	{ 
+		if ($l > 0)  
+		{ 
+			$ret = array(); 
+			$len = mb_strlen($str, "UTF-8"); 
+			for ($i = 0; $i < $len; $i += $l) 
+			{ 
+				$ret[] = mb_substr($str, $i, $l, "UTF-8"); 
+			} 
+		return $ret; 
+		}
+
+		return preg_split("//u", $str, -1, PREG_SPLIT_NO_EMPTY); 
+	} 
 	
 	/*
 	 * Define what manner of automatic margining to use if auto margins are desired
