@@ -147,10 +147,15 @@ class Shine_pdf extends Channel {
 				}
 
 				//delete old cache files
-				foreach (glob($this->cache_path.$this->query->row('entry_id')."_*.pdf") as $_filename) {
-				    unlink($_filename);
-				    $this->_debug[] = 'Delete old cache file: '.$_filename;
+				$old_files = glob($this->cache_path.$this->query->row('entry_id')."_*.pdf");
+				if(!empty($old_files))
+				{
+					foreach ( as $_filename) {
+					    @unlink($_filename);
+					    $this->_debug[] = 'Delete old cache file: '.$_filename;
+					}
 				}
+				
 
 				//create new file
 				$this->pdf->Output($filename, 'F');
