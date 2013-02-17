@@ -1,5 +1,7 @@
 <?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
 
+@ini_set("pcre.backtrack_limit","10000000");
+
 if( ! class_exists('Channel'))
 {
 	require_once(PATH_MOD.'channel/mod.channel.php');
@@ -132,34 +134,31 @@ class Shine_pdf extends Channel {
 				}
 
 				//split in chunks 
-				if(strlen($this->body) > 100000)
-				{
-					$chunks = $this->_split_chunk($this->body);
-					$total = count($chunks); 
+				//if(strlen($this->body) > 10000)
+				//{
+				
+				
 
+					//$chunks = $this->_split_chunk($this->body);
+					//print_r($chunks);exit;
+					$chunks = explode('</div>', $this->body);
+
+					$this->pdf->WriteHTML('', 0, true, false); 
 					if(!empty($chunks)) 
 					{ 
-						foreach($chunks as $key=>$chunk) 
+						foreach($chunks as $chunk) 
 						{ 
-							if($key == 0)
-							{
-								$this->pdf->WriteHTML($chunk, 0, true, false); 
-							}
-							else if(($key+1) == $total )
-							{
-								$this->pdf->WriteHTML($chunk, 0, false, true); 
-							}
-							else
-							{
-								$this->pdf->WriteHTML($chunk, 0, false, false); 
-							}	
+							$this->pdf->WriteHTML($chunk.'</div>', 0, false, false); 
 						} 
 					} 
-				}
-				else
-				{
-					$this->pdf->WriteHTML($this->body, 0);
-				}
+					$this->pdf->WriteHTML('', 0, false, true); 
+				//}
+				//else
+				//{
+				//	$this->pdf->WriteHTML($this->body, 0);
+				//}
+				//
+				
 
 				//delete old cache files
 				$old_files = glob($this->cache_path.$this->query->row('entry_id')."_*.pdf");
@@ -207,11 +206,15 @@ class Shine_pdf extends Channel {
 
 	}
 
+
 	/* 
 	* proper unicode str_split 
 	*/
 	private function _split_chunk($content) {
-	   return preg_split('/(<[^>]*[^\/]>)/i', $content, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
+	   //return preg_split('/(<[^>]*[^\/]>)/i', $content, -1, PREG_SPLIT_NO_EMPTY | PREG_SPLIT_DELIM_CAPTURE);
+	   //return preg_split('/\s+/', $content);
+	   //return preg_split('/\s+(?![^<>]+>)/m', $content);
+	   return preg_split('~(</?[\w][^>]*>)~', $content, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
 	}
 		
 	/*
